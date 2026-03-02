@@ -1,0 +1,23 @@
+{
+  "TMT": {
+    "updateDetails": [
+      {
+        "URL": "tmt-rlg.crm.dynamics.com"
+      }
+    ]
+  },
+  "TMT - Palantir": {
+    "updateDetails": [
+      {
+        "URL": "tmt-palantir.crm.dynamics.com"
+      }
+    ]
+  },
+  "TMT - Demo": {
+    "updateDetails": [
+      {
+        "URL": "tmt-demo.crm.dynamics.com"
+      }
+    ]
+  }
+}
