@@ -1,0 +1,23 @@
+{
+  "PowerBI Workspace Name 1": {
+    "updateDetails": [
+      {
+        "URL": "org1.crm.dynamics.com"
+      }
+    ]
+  },
+  "PowerBI Workspace Name 2": {
+    "updateDetails": [
+      {
+        "URL": "org2.crm.dynamics.com"
+      }
+    ]
+  },
+  "Power BI Workspace Name 3": {
+    "updateDetails": [
+      {
+        "URL": "org3.crm.dynamics.com"
+      }
+    ]
+  }
+}

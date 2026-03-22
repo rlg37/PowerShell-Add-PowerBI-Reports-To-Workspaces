@@ -1,65 +1,98 @@
-﻿###UPLOAD ONE POWER BI PAGINATED REPORT TO MULTIPLE WORKSPACES###
-
-###################Variables to to adjust########################
-$Tenant = Read-Host "Tenant Name: "
-$json = Get-Content "C:\Users\${Tenant}WorkspaceParams.json" | ConvertFrom-Json
-$RdlFilePath = "C:\Users\All Users.rdl"
+﻿#################################################################
+# UPLOAD POWER BI PAGINATED (.rdl) REPORT TO MULTIPLE WORKSPACES
+#################################################################
 
 #################################################################
-####ASSESS IF POWER BI MODULE IS NEEDED##########################
+# ASSESS IF POWER BI MODULE IS INSTALLED
 #################################################################
+
 if (-not (Get-Module -ListAvailable -Name MicrosoftPowerBIMgmt)) {
     try {
         Install-Module -Name MicrosoftPowerBIMgmt -Scope CurrentUser -Force -ErrorAction Stop
         Write-Host "Power BI Module installed successfully."
     }
     catch {
-        Write-Host "Power BI Module installation failed: $($_.Exception.Message)"
+        Write-Error "Power BI Module installation failed: $($_.Exception.Message)"
+        exit 1
     }
 }
 else {
-    Write-Host "Power BI Module already installed. Continuing Script."
+    Write-Host "Power BI Module already installed. Continuing script."
 }
 
-
-
 #################################################################
-############CONNECT TO POWER BI WITH SERVICE PRINCIPAL###########
+# VARIABLES
 #################################################################
 
-$TenantId = Read-Host "Tenant ID: "
-$AppId = Read-Host "App ID: " 
-$AppSecret = Read-Host "Secret: "
+$validChoices = @("Commercial", "GCC", "GCC High", "DOD")
+do {
+    Write-Host "Choose Impact Level: Commercial, GCC, GCC High, DOD"
+    $ILChoice = Read-Host "Selection"
+} while ($ILChoice -notin $validChoices)
 
-## Create a secure credential object ## 
-$Credential = New-Object PSCredential($AppId, (ConvertTo-SecureString -String $AppSecret -AsPlainText -Force))
+$API = switch ($ILChoice) {
+    "Commercial" { "api.powerbi.com" }
+    "GCC"        { "api.powerbigov.us" }
+    "GCC High"   { "api.high.powerbigov.us" }
+    "DOD"        { "api.mil.powerbigov.us" }
+}
+Write-Host "Using API endpoint: $API"
 
-## Connect to the Power BI service using the service principal ##
-Connect-PowerBIServiceAccount -Tenant $TenantId -ServicePrincipal -Credential $Credential
 
+$Tenant      = Read-Host "Tenant Name"
+$JsonPath    = "C:\Users\${Tenant}WorkspaceParams.json" #Input JSON File Path Here
+$RDLFilePath = "C:\Users\Test File.rdl" #Input File Path Here
 
-#########################################################################
-########OPTION TO USE SERVICE PRINCIPAL OR OWN POWER BI ACCOUNT##########
-#########################################################################
+if (-not (Test-Path $JsonPath)) {
+    Write-Error "Workspace params file not found: $JsonPath"
+    exit 1
+}
+if (-not (Test-Path $RDLFilePath)) {
+    Write-Error "RDL file not found: $RDLFilePath"
+    exit 1
+}
 
-#Connect-PowerBIServiceAccount
-
+$json = Get-Content $JsonPath -ErrorAction Stop | ConvertFrom-Json
 
 #################################################################
-###########FUNCTION TO PUBLISH .RDL FILE#########################
+# CONNECT TO POWER BI
 #################################################################
 
+$Environment = switch ($ILChoice) {
+    "Commercial" { "Public" }
+    "GCC"        { "USGov" }
+    "GCC High"   { "USGovHigh" }
+    "DOD"        { "USGovMil" }
+}
 
-##FUNCTION TO UPLOAD REPORTS##
-function Publish-ImportRDLFile 
-{
-    param
-    (
+# --- Service Principal (optional) ---
+# $TenantId   = Read-Host "Tenant ID"
+# $AppId      = Read-Host "App ID"
+# $AppSecret  = Read-Host "Secret"
+# $Credential = New-Object PSCredential($AppId, (ConvertTo-SecureString -String $AppSecret -AsPlainText -Force))
+# Connect-PowerBIServiceAccount -Environment $Environment -Tenant $TenantId -ServicePrincipal -Credential $Credential -ErrorAction Stop
+
+# --- Interactive login ---
+try {
+    Connect-PowerBIServiceAccount -Environment $Environment -ErrorAction Stop
+    Write-Host "Connected to Power BI ($ILChoice) successfully."
+}
+catch {
+    Write-Error "Failed to connect to Power BI: $($_.Exception.Message)"
+    exit 1
+}
+
+#################################################################
+# FUNCTION: PUBLISH RDL FILE TO POWER BI
+#################################################################
+
+function Publish-RDLFile {
+    param (
         [string]$RdlFilePath,
-        [string]$GroupId
+        [string]$GroupId,
+        [string]$API
     )
 
-    # Get file content and create body
     $fileName = [IO.Path]::GetFileName($RdlFilePath)
     $fileNameNoExt = [System.IO.Path]::GetFileNameWithoutExtension($RdlFilePath)
     $boundary = [guid]::NewGuid().ToString()
@@ -91,10 +124,10 @@ $fileBody
 
     #Set URL
     if ($GroupId) {
-        $url = "https://api.powerbi.com/v1.0/myorg/groups/$GroupId/imports?datasetDisplayName=$fileName&nameConflict=$nameConflict"
+        $url = "https://$($API)/v1.0/myorg/groups/$GroupId/imports?datasetDisplayName=$fileName&nameConflict=$nameConflict"
     }
     else {
-        $url = "https://api.powerbi.com/v1.0/myorg/imports?datasetDisplayName=$fileName&nameConflict=$nameConflict"
+        $url = "https://$($API)/v1.0/myorg/imports?datasetDisplayName=$fileName&nameConflict=$nameConflict"
     }
 
     # Create import
@@ -102,48 +135,71 @@ $fileBody
     $report.id
 }
 
+#################################################################
+# LOOP: UPDATE CONNECTION STRING AND PUBLISH PER WORKSPACE
+#################################################################
 
-###############################################################
-########REPLACE STRING CONNECTIONS AND PUBLISH#################
-###############################################################
-
-#Use $json File to Retrieve Workspace Names, Environment URLs, and Database Names
+$success = 0
+$failed  = 0
 
 foreach ($WorkspaceName in $json.PSObject.Properties.Name) {
-    $details = $json.$WorkspaceName.updateDetails[0]
+    Write-Host "`n--- Processing workspace: $WorkspaceName ---"
 
-    $url = $details.URL
-    if (-not $url) { $url = $details.newValue }
+    try {
+        $details = $json.$WorkspaceName.updateDetails[0]
+        $url     = if ($details.URL) { $details.URL } else { $details.newValue }
 
-    $database = $url -replace "\.crm.*",""
+        if (-not $url) {
+            Write-Warning "No URL found for '$WorkspaceName'. Skipping."
+            $failed++
+            continue
+        }
 
-    Write-Host "Name: $WorkspaceName"
-    Write-Host "URL: $url"
-    Write-Host "Database: $database"
+        # Derive database name from URL (e.g. tmt-demo.crm.dynamics.com -> tmt-demo)
+        $database = $url -replace "\..*", ""
+        Write-Host "URL: $url"
+        Write-Host "Database: $database"
 
-    # Load the RDL as XML
-    [xml]$rdl = Get-Content $RdlFilePath
-    
-    # New connection string
-    $newConn = "Data Source=$url;Initial Catalog=$database;Authentication=ActiveDirectoryInteractive"
-    
-    # Update Data Source (works if only one DataSource)
-    $rdl.Report.DataSources.DataSource.ConnectionProperties.ConnectString = $newConn
-    
-    # Save updated RDL back to file
-    $rdl.Save($RdlFilePath)
-    Write-Host "Updated $($RdlFilePath)"
+        # Update connection string in RDL
+        [xml]$rdl = Get-Content $RDLFilePath -ErrorAction Stop
+        $DataSources = $rdl.Report.DataSources.DataSource
 
-    #retrieve workspace
-    $GroupId = Get-PowerBIWorkspace -Name $WorkspaceName
-    Write-Host "Retrieved GroupID As "$GroupId.Id
+        if (-not $DataSources) {
+            Write-Warning "No DataSources found in RDL. Skipping '$WorkspaceName'."
+            $failed++
+            continue
+        }
 
-    #publish rdl file
-    Publish-ImportRDLFile -RdlFilePath $RdlFilePath -GroupId $GroupId.Id
-    Write-Host "File has been published to '$WorkspaceName'!"
-    Write-Host " "
+        $newConn = "Data Source=$url;Initial Catalog=$database;Authentication=ActiveDirectoryInteractive"
+        foreach ($ds in $DataSources) {
+            $ds.ConnectionProperties.ConnectString = $newConn
+        }
 
+        $rdl.Save($RDLFilePath)
+        Write-Host "Connection string updated."
+
+        # Get workspace ID
+        $Workspace = Get-PowerBIWorkspace -Name $WorkspaceName -ErrorAction Stop
+        if (-not $Workspace) {
+            Write-Warning "Workspace '$WorkspaceName' not found. Skipping."
+            $failed++
+            continue
+        }
+        Write-Host "Workspace ID: $($Workspace.Id)"
+
+        # Publish
+        $id = Publish-RDLFile -RdlFilePath $RDLFilePath -GroupId $Workspace.Id -API $API
+        Write-Host "Published '$WorkspaceName' successfully. (Import ID: $id)"
+        $success++
+    }
+    catch {
+        Write-Warning "Error processing '$WorkspaceName': $($_.Exception.Message)"
+        $failed++
+    }
 }
+
+Write-Host "`nComplete. Published: $success | Failed: $failed"
+Disconnect-PowerBIServiceAccount
 
 
 
