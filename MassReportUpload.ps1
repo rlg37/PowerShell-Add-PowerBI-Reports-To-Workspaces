@@ -115,28 +115,7 @@ foreach ($WorkspaceName in $json.PSObject.Properties.Name) {
         Write-Host "Parameters updated successfully for '$WorkspaceName'."
     }
     catch {
-        Write-Host "==== ERROR DETAILS for '$WorkspaceName' ====" -ForegroundColor Yellow
-        Write-Host "Message      : $($_.Exception.Message)"
-        Write-Host "Type         : $($_.Exception.GetType().FullName)"
-        if ($_.Exception.InnerException) {
-            Write-Host "Inner Message: $($_.Exception.InnerException.Message)"
-            Write-Host "Inner Type   : $($_.Exception.InnerException.GetType().FullName)"
-        }
-        # Try to pull the HTTP response body — works for WebException-wrapped errors.
-        $resp = $_.Exception.Response
-        if (-not $resp -and $_.Exception.InnerException) { $resp = $_.Exception.InnerException.Response }
-        if ($resp) {
-            try {
-                $stream = $resp.GetResponseStream()
-                $stream.Position = 0
-                $reader = New-Object System.IO.StreamReader($stream)
-                $respBody = $reader.ReadToEnd()
-                Write-Host "HTTP Status  : $([int]$resp.StatusCode) $($resp.StatusCode)"
-                Write-Host "Response Body: $respBody"
-            } catch { Write-Host "Could not read response body: $($_.Exception.Message)" }
-        }
-        Write-Host "ScriptStackTrace:`n$($_.ScriptStackTrace)"
-        Write-Host "============================================" -ForegroundColor Yellow
+        Write-Warning "Error processing workspace '$WorkspaceName': $($_.Exception.Message)"
         continue
     }
 }

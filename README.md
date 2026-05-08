@@ -60,6 +60,8 @@ Uploads a **single `.pbix` report** to **multiple workspaces** and updates the d
 
 > **Important — JSON file naming:** Same requirement as above. The script constructs the path as `{TenantName}WorkspaceParams.json` from the Tenant Name prompt, so rename or copy the provided [TenantWorkspaceParams.json](TenantWorkspaceParams.json) template to match your tenant prefix before running.
 
+> **Important — Parameter type must be `Text`:** Before publishing, open the `.pbix` in Power BI Desktop → **Home → Transform data → Manage Parameters** and confirm the parameter you're updating (e.g. `Environment`) has **Type: Text** with a current value set. The Power BI service refuses API updates to parameters typed as `Any` or `Binary` and the script will fail with `ActionNotSupported`. The parameter name in the script (line ~104) must also match the parameter name in the `.pbix` exactly.
+
 **What it does:**
 1. Prompts for an Impact Level and sets the appropriate API endpoint.
 2. Prompts for a Tenant Name and loads the corresponding `{TenantName}WorkspaceParams.json`.
