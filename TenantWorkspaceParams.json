@@ -1,22 +1,22 @@
 {
-  "PowerBI Workspace Name 1": {
+  "TMT - Demo": {
     "updateDetails": [
       {
-        "URL": "org1.crm.dynamics.com"
+        "URL": "tmt-demo.crm.dynamics.com"
       }
     ]
   },
-  "PowerBI Workspace Name 2": {
+  "TMT - Palantir": {
     "updateDetails": [
       {
-        "URL": "org2.crm.dynamics.com"
+        "URL": "tmt-palantir.crm.dynamics.com"
       }
     ]
   },
-  "Power BI Workspace Name 3": {
+  "TMT - RLG": {
     "updateDetails": [
       {
-        "URL": "org3.crm.dynamics.com"
+        "URL": "tmt-rlg.crm.dynamics.com"
       }
     ]
   }

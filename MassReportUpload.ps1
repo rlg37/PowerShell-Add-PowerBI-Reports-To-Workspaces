@@ -74,15 +74,15 @@ foreach ($WorkspaceName in $json.PSObject.Properties.Name) {
     Write-Host "`n--- Processing workspace: $WorkspaceName ---"
 
     try {
-        $Environment = $json.$WorkspaceName.updateDetails[0].URL
-        Write-Host "URL: $Environment"
+        $EnvironmentValue = $json.$WorkspaceName.updateDetails[0].URL
+        Write-Host "URL: $EnvironmentValue"
 
         $WorkspaceId = (Get-PowerBIWorkspace -Name $WorkspaceName -ErrorAction Stop).Id
 
 
         # Upload / overwrite report
         Write-Host "Uploading '$ReportName' to workspace '$WorkspaceName'..."
-        New-PowerBIReport -Path $FilePath -WorkspaceId $WorkspaceId -ConflictAction Overwrite -ErrorAction Stop
+        New-PowerBIReport -Path $FilePath -WorkspaceId $WorkspaceId -ConflictAction CreateOrOverwrite -ErrorAction Stop
         Write-Host "Report uploaded."
 
         # Brief wait for dataset to register then look it up by name
@@ -101,19 +101,42 @@ foreach ($WorkspaceName in $json.PSObject.Properties.Name) {
         $Body = @{
             updateDetails = @(
                 @{
-                    name     = "Environment"
-                    newValue = $Environment
+                    name     = "EnvironmentURL"
+                    newValue = $EnvironmentValue
                 }
             )
         } | ConvertTo-Json -Depth 10
-        
-        $Url = "https://$API/v1.0/myorg/groups/$WorkspaceId/datasets/$($DatasetId)/Default.UpdateParameters"
-        Invoke-PowerBIRestMethod -Method POST -Url $Url -Body $Body -ContentType "application/json" -ErrorAction Stop
+
+        # Relative URL — Invoke-PowerBIRestMethod auto-prefixes the host of the
+        # connected environment (Commercial / GCC / GCC High / DOD).
+        $RelUrl = "groups/$WorkspaceId/datasets/$DatasetId/Default.UpdateParameters"
+        Invoke-PowerBIRestMethod -Method POST -Url $RelUrl -Body $Body -ContentType "application/json" -ErrorAction Stop
 
         Write-Host "Parameters updated successfully for '$WorkspaceName'."
     }
     catch {
-        Write-Warning "Error processing workspace '$WorkspaceName': $($_.Exception.Message)"
+        Write-Host "==== ERROR DETAILS for '$WorkspaceName' ====" -ForegroundColor Yellow
+        Write-Host "Message      : $($_.Exception.Message)"
+        Write-Host "Type         : $($_.Exception.GetType().FullName)"
+        if ($_.Exception.InnerException) {
+            Write-Host "Inner Message: $($_.Exception.InnerException.Message)"
+            Write-Host "Inner Type   : $($_.Exception.InnerException.GetType().FullName)"
+        }
+        # Try to pull the HTTP response body — works for WebException-wrapped errors.
+        $resp = $_.Exception.Response
+        if (-not $resp -and $_.Exception.InnerException) { $resp = $_.Exception.InnerException.Response }
+        if ($resp) {
+            try {
+                $stream = $resp.GetResponseStream()
+                $stream.Position = 0
+                $reader = New-Object System.IO.StreamReader($stream)
+                $respBody = $reader.ReadToEnd()
+                Write-Host "HTTP Status  : $([int]$resp.StatusCode) $($resp.StatusCode)"
+                Write-Host "Response Body: $respBody"
+            } catch { Write-Host "Could not read response body: $($_.Exception.Message)" }
+        }
+        Write-Host "ScriptStackTrace:`n$($_.ScriptStackTrace)"
+        Write-Host "============================================" -ForegroundColor Yellow
         continue
     }
 }
