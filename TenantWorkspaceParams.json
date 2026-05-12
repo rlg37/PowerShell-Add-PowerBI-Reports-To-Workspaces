@@ -1,22 +1,22 @@
 {
-  "TMT - Demo": {
+  "Env 1 Workspace": {
     "updateDetails": [
       {
-        "URL": "tmt-demo.crm.dynamics.com"
+        "URL": "env1.crm.dynamics.com"
       }
     ]
   },
-  "TMT - Palantir": {
+  "Env 2 Workspace": {
     "updateDetails": [
       {
-        "URL": "tmt-palantir.crm.dynamics.com"
+        "URL": "env2.crm.dynamics.com"
       }
     ]
   },
-  "TMT - RLG": {
+  "Env 3 Workspace": {
     "updateDetails": [
       {
-        "URL": "tmt-rlg.crm.dynamics.com"
+        "URL": "env3.crm.dynamics.com"
       }
     ]
   }
