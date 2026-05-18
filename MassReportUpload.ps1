@@ -55,7 +55,7 @@ $Environment = switch ($ILChoice) {
 # $AppId     = Read-Host "App ID"
 # $AppSecret = Read-Host "Secret"
 # $Credential = New-Object PSCredential($AppId, (ConvertTo-SecureString -String $AppSecret -AsPlainText -Force))
-# Connect-PowerBIServiceAccount -$Environment -Tenant $TenantId -ServicePrincipal -Credential $Credential
+# Connect-PowerBIServiceAccount -Environment $Environment -Tenant $TenantId -ServicePrincipal -Credential $Credential
 
 try {
     Connect-PowerBIServiceAccount -Environment $Environment -ErrorAction Stop
@@ -110,12 +110,23 @@ foreach ($WorkspaceName in $json.PSObject.Properties.Name) {
         # Relative URL — Invoke-PowerBIRestMethod auto-prefixes the host of the
         # connected environment (Commercial / GCC / GCC High / DOD).
         $RelUrl = "groups/$WorkspaceId/datasets/$DatasetId/Default.UpdateParameters"
-        Invoke-PowerBIRestMethod -Method POST -Url $RelUrl -Body $Body -ContentType "application/json" -ErrorAction Stop
+        Write-Host "POST $RelUrl"
+        Write-Host "Body: $Body"
+        $Response = Invoke-PowerBIRestMethod -Method Post -Url $RelUrl -Body $Body -ContentType "application/json" -ErrorAction Stop
+        if ($Response) { Write-Host "Response: $Response" }
 
         Write-Host "Parameters updated successfully for '$WorkspaceName'."
     }
     catch {
-        Write-Warning "Error processing workspace '$WorkspaceName': $($_.Exception.Message)"
+        $msg     = $_.Exception.Message
+        $details = $_.ErrorDetails.Message
+        $inner   = $_.Exception.InnerException.Message
+        $line    = $_.InvocationInfo.ScriptLineNumber
+        $cmd     = $_.InvocationInfo.MyCommand
+        Write-Warning "Error processing workspace '$WorkspaceName' (line $line, $cmd):"
+        if ($msg)     { Write-Warning "  Message: $msg" }
+        if ($details) { Write-Warning "  Details: $details" }
+        if ($inner)   { Write-Warning "  Inner:   $inner" }
         continue
     }
 }
