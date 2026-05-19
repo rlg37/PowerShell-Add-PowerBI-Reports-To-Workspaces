@@ -56,11 +56,21 @@ Publishes a **single `.rdl` file** to **multiple workspaces**, dynamically patch
 
 ### [MassReportUpload.ps1](MassReportUpload.ps1)
 
-Uploads a **single `.pbix` report** to **multiple workspaces** and updates the dataset's `Environment` parameter in each workspace to point at the correct Dataverse URL.
+Uploads a **single `.pbix` report** to **multiple workspaces**, takes over ownership of each dataset, and updates its `EnvironmentURL` parameter to point at the correct Dataverse URL.
 
 > **Important — JSON file naming:** Same requirement as above. The script constructs the path as `{TenantName}WorkspaceParams.json` from the Tenant Name prompt, so rename or copy the provided [TenantWorkspaceParams.json](TenantWorkspaceParams.json) template to match your tenant prefix before running.
 
-> **Important — Parameter type must be `Text`:** Before publishing, open the `.pbix` in Power BI Desktop → **Home → Transform data → Manage Parameters** and confirm the parameter you're updating (e.g. `Environment`) has **Type: Text** with a current value set. The Power BI service refuses API updates to parameters typed as `Any` or `Binary` and the script will fail with `ActionNotSupported`. The parameter name in the script (line ~104) must also match the parameter name in the `.pbix` exactly.
+> **⚠️ Critical — The `.pbix` parameter being updated MUST be of type `Text`:**
+> This is a hard requirement of the Power BI REST API, not a script limitation. Any other parameter type will cause the API call to fail and the report's connection will not be updated.
+>
+> Before publishing, open the `.pbix` in Power BI Desktop → **Home → Transform data → Manage Parameters** and verify:
+> 1. The parameter you intend to update (default name: `EnvironmentURL`) has **Type: Text**.
+> 2. The parameter has a current value set (it cannot be empty).
+> 3. The parameter name in the `.pbix` matches **exactly** what the script sends in its `updateDetails` body (case-sensitive).
+>
+> The Power BI service refuses `UpdateParameters` calls against parameters typed as `Any`, `Binary`, `Number`, `Date`, etc. and the script will fail with `ActionNotSupported`. If you need to pass non-text values, convert them inside Power Query rather than changing the parameter type.
+
+> **Important — Dataset takeover:** The script calls `Default.TakeOver` on each dataset after upload so the connected account becomes the dataset owner. This is required for `Default.UpdateParameters` to succeed when the dataset was previously owned by another user or service principal.
 
 **What it does:**
 1. Prompts for an Impact Level and sets the appropriate API endpoint.
@@ -70,8 +80,9 @@ Uploads a **single `.pbix` report** to **multiple workspaces** and updates the d
 5. Loops through each workspace entry in the JSON file:
    - Uploads (or overwrites) the `.pbix` file to the workspace using `New-PowerBIReport`.
    - Waits briefly for the dataset to register, then looks it up by name.
-   - Calls the Power BI REST API (`Default.UpdateParameters`) to set the `Environment` parameter on the dataset to the workspace-specific URL.
-6. Prints completion status per workspace and disconnects.
+   - Takes ownership of the dataset via the Power BI REST API (`Default.TakeOver`) so the connected account has rights to update its parameters.
+   - Calls the Power BI REST API (`Default.UpdateParameters`) to set the `EnvironmentURL` parameter on the dataset to the workspace-specific URL.
+6. Prints completion status per workspace (with detailed error info — message, details, inner exception, line number, and command — on failure) and disconnects.
 
 **Key variables to configure before running:**
 | Variable | Description |

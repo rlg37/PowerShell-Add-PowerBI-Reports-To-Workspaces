@@ -55,8 +55,18 @@ $Environment = switch ($ILChoice) {
 # $AppId     = Read-Host "App ID"
 # $AppSecret = Read-Host "Secret"
 # $Credential = New-Object PSCredential($AppId, (ConvertTo-SecureString -String $AppSecret -AsPlainText -Force))
-# Connect-PowerBIServiceAccount -Environment $Environment -Tenant $TenantId -ServicePrincipal -Credential $Credential
 
+# --- Connect Using Service Principal ---
+#try {
+#    Connect-PowerBIServiceAccount -Environment $Environment -Tenant $TenantId -ServicePrincipal -Credential $Credential
+#    Write-Host "Connected to Power BI ($ILChoice) successfully."
+#}
+#catch {
+#    Write-Error "Failed to connect to Power BI: $($_.Exception.Message)"
+#    exit 1
+#}
+
+# --- Connect Using User Account ---
 try {
     Connect-PowerBIServiceAccount -Environment $Environment -ErrorAction Stop
     Write-Host "Connected to Power BI ($ILChoice) successfully."
@@ -96,6 +106,17 @@ foreach ($WorkspaceName in $json.PSObject.Properties.Name) {
         }
 
         Write-Host "Found DatasetId: $DatasetId"
+
+        # Take Over Dataset
+        Write-Host "Taking over dataset '$DatsetId'..." -ForegroundColor Cyan
+        $DatasetUrl = "groups/$WorkspaceId/datasets/$DatasetId/Default.TakeOver"
+        try{
+            Invoke-PowerBIRestMethod -Method Post -Url $DatasetUrl -ErrorAction Stop
+            Write-Host "Dataset takeover successful." -ForegroundColor Green
+        }
+        catch{
+            throw "Takeover Failed: $_"
+        }
 
         # Build parameter update body
         $Body = @{
